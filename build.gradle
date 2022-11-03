@@ -1,7 +1,7 @@
 
 
 buildscript {
-    ext.kotlin_version = '1.3.61'
+    ext.kotlin_version = '1.7.10'
     ext.versions = [
             'minSdk'    : 9,
             'compileSdk': 26,
@@ -32,6 +32,12 @@ buildscript {
             ]
     ]
 
+    ext {
+        RELEASE_REPOSITORY_URL = 'https://packages.aliyun.com/maven/repository/2076509-release-JnbdDx/'
+        SONATYPE_NEXUS_USERNAME = "602e6a1d8e57bd6e42d3cfc1"
+        SONATYPE_NEXUS_PASSWORD = "(b9YDea3-w2X"
+    }
+
     repositories {
         mavenCentral()
         google()
@@ -53,7 +59,6 @@ subprojects { project ->
     version = VERSION_NAME
 
     repositories {
-        jcenter()
         google()
         mavenCentral()
         maven {

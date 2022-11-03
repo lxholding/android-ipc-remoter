@@ -7,6 +7,7 @@ import kotlinx.coroutines.Dispatchers
 import remoter.RemoterGlobalProperties
 import remoter.RemoterProxyListener
 import remoter.RemoterStub
+import remoter.annotations.NullableType
 import remoter.annotations.Oneway
 import remoter.annotations.ParamIn
 import remoter.annotations.ParamOut
@@ -17,12 +18,14 @@ import javax.lang.model.element.VariableElement
 import javax.lang.model.type.ArrayType
 import javax.lang.model.type.DeclaredType
 import javax.lang.model.type.TypeKind
+import javax.lang.model.type.WildcardType
 
 
 /**
  * A {@link RemoteBuilder} that knows how to generate methods for Stub and Proxy
  */
-class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingManager) : KRemoterBuilder(remoterInterfaceElement, bindingManager) {
+class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingManager) :
+    KRemoterBuilder(remoterInterfaceElement, bindingManager) {
 
 
     /**
@@ -30,7 +33,12 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     fun addProxyMethods(classBuilder: TypeSpec.Builder) {
         processRemoterElements(classBuilder, object : ElementVisitor {
-            override fun visitElement(classBuilder: TypeSpec.Builder, member: Element, methodIndex: Int, methodBuilder: FunSpec.Builder?) {
+            override fun visitElement(
+                classBuilder: TypeSpec.Builder,
+                member: Element,
+                methodIndex: Int,
+                methodBuilder: FunSpec.Builder?
+            ) {
                 addProxyMethods(classBuilder, member, methodIndex)
             }
         }, null)
@@ -40,14 +48,14 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
 
     fun addStubMethods(classBuilder: TypeSpec.Builder) {
         val methodBuilder = FunSpec.builder("onTransact")
-                .addModifiers(KModifier.PUBLIC)
-                .addModifiers(KModifier.OVERRIDE)
-                .returns(Boolean::class)
-                .throws(ClassName("android.os", "RemoteException"))
-                .addParameter("code", Int::class)
-                .addParameter(ParamBuilder.DATA, ClassName("android.os", "Parcel"))
-                .addParameter(ParamBuilder.REPLY, ClassName("android.os", "Parcel").copy(true))
-                .addParameter("flags", Int::class)
+            .addModifiers(KModifier.PUBLIC)
+            .addModifiers(KModifier.OVERRIDE)
+            .returns(Boolean::class)
+            .throws(ClassName("android.os", "RemoteException"))
+            .addParameter("code", Int::class)
+            .addParameter(ParamBuilder.DATA, ClassName("android.os", "Parcel"))
+            .addParameter(ParamBuilder.REPLY, ClassName("android.os", "Parcel").copy(true))
+            .addParameter("flags", Int::class)
 
         methodBuilder.beginControlFlow("try")
         methodBuilder.beginControlFlow("when (mapTransactionCode(code))")
@@ -75,7 +83,12 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
 
 
         processRemoterElements(classBuilder, object : ElementVisitor {
-            override fun visitElement(classBuilder: TypeSpec.Builder, member: Element, methodIndex: Int, methodBuilder: FunSpec.Builder?) {
+            override fun visitElement(
+                classBuilder: TypeSpec.Builder,
+                member: Element,
+                methodIndex: Int,
+                methodBuilder: FunSpec.Builder?
+            ) {
                 addStubMethods(classBuilder, member, methodIndex, methodBuilder!!)
             }
         }, methodBuilder)
@@ -100,7 +113,10 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
         methodBuilder.addStatement("return true")
         methodBuilder.endControlFlow()
         methodBuilder.beginControlFlow("else")
-        methodBuilder.addStatement("%T.w(\"StubCall: serviceImpl?.toString()\", \"Binder call failed.\", re)", ClassName("android.util", "Log"))
+        methodBuilder.addStatement(
+            "%T.w(\"StubCall: serviceImpl?.toString()\", \"Binder call failed.\", re)",
+            ClassName("android.util", "Log")
+        )
         methodBuilder.addStatement("throw %T(re)", RuntimeException::class)
         methodBuilder.endControlFlow()
         methodBuilder.endControlFlow()
@@ -118,7 +134,12 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
     /**
      * Called from the [KRemoterBuilder.ElementVisitor] callback
      */
-    private fun addStubMethods(classBuilder: TypeSpec.Builder, member: Element, methodIndex: Int, methodBuilder: FunSpec.Builder) {
+    private fun addStubMethods(
+        classBuilder: TypeSpec.Builder,
+        member: Element,
+        methodIndex: Int,
+        methodBuilder: FunSpec.Builder
+    ) {
         val executableElement = member as ExecutableElement
         val methodName = executableElement.simpleName.toString()
         val isOneWay = (executableElement.returnType.kind == TypeKind.VOID
@@ -135,8 +156,10 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
         val paramsSize = executableElement.parameters.size
 
         val isSuspendFunction = executableElement.isSuspendFunction()
-        val isSuspendReturnNullable = if (isSuspendFunction) executableElement.isSuspendReturningNullable() else false
-        val isSuspendUnit = if (isSuspendFunction) (executableElement.getReturnTypeOfSuspend().asTypeName() == UNIT) else false
+        val isSuspendReturnNullable =
+            if (isSuspendFunction) executableElement.isSuspendReturningNullable() else false
+        val isSuspendUnit = if (isSuspendFunction) (executableElement.getReturnTypeOfSuspend()
+            .asTypeName() == UNIT) else false
         if (isSuspendFunction) {
             methodBuilder.beginControlFlow("kotlinx.coroutines.runBlocking")
         }
@@ -156,12 +179,19 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
                 else -> ParamBuilder.ParamType.IN_OUT
             }
 
-            val paramBuilder = bindingManager.getBuilderForParam(remoterInterfaceElement, param.asType())
+            val paramBuilder =
+                bindingManager.getBuilderForParam(remoterInterfaceElement, param.asType())
 
             if (paramBuilder != null) {
                 val paramName = "arg_stb_$paramIndex"
                 paramNames.add(paramName)
-                paramBuilder.writeParamsToStub(executableElement, param, paramType, paramName, methodBuilder)
+                paramBuilder.writeParamsToStub(
+                    executableElement,
+                    param,
+                    paramType,
+                    paramName,
+                    methodBuilder
+                )
                 if (paramType != ParamBuilder.ParamType.IN) {
                     outParams.add(param)
                     outParamsNames.add(paramName)
@@ -190,7 +220,10 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
         }
         methodCall += ")"
 
-        methodBuilder.addStatement("%T.set(${ParamBuilder.DATA}.readHashMap(javaClass.getClassLoader()))", RemoterGlobalProperties::class.java)
+        methodBuilder.addStatement(
+            "%T.set(${ParamBuilder.DATA}.readHashMap(javaClass.getClassLoader()))",
+            RemoterGlobalProperties::class.java
+        )
 
         if (isSuspendFunction) {
             if (!isSuspendUnit) {
@@ -214,18 +247,32 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
 
             if (isSuspendFunction) {
                 if (!isSuspendUnit) {
-                    val paramBuilder = bindingManager.getBuilderForParam(remoterInterfaceElement, executableElement.getReturnTypeOfSuspend())
+                    val paramBuilder = bindingManager.getBuilderForParam(
+                        remoterInterfaceElement,
+                        executableElement.getReturnTypeOfSuspend()
+                    )
                     if (paramBuilder != null) {
-                        paramBuilder.readResultsFromStub(executableElement, executableElement.getReturnAsTypeMirror(), methodBuilder)
+                        paramBuilder.readResultsFromStub(
+                            executableElement,
+                            executableElement.getReturnAsTypeMirror(),
+                            methodBuilder
+                        )
                     } else {
                         logError("Unmarshallable return type " + executableElement.returnType)
                     }
                 }
             } else {
                 if (executableElement.returnType.kind != TypeKind.VOID) {
-                    val paramBuilder = bindingManager.getBuilderForParam(remoterInterfaceElement, executableElement.returnType)
+                    val paramBuilder = bindingManager.getBuilderForParam(
+                        remoterInterfaceElement,
+                        executableElement.returnType
+                    )
                     if (paramBuilder != null) {
-                        paramBuilder.readResultsFromStub(executableElement, executableElement.returnType, methodBuilder)
+                        paramBuilder.readResultsFromStub(
+                            executableElement,
+                            executableElement.returnType,
+                            methodBuilder
+                        )
                     } else {
                         logError("Unmarshallable return type " + executableElement.returnType)
                     }
@@ -237,8 +284,14 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
                     param.getAnnotation(ParamOut::class.java) != null -> ParamBuilder.ParamType.OUT
                     else -> ParamBuilder.ParamType.IN_OUT
                 }
-                val paramBuilder = bindingManager.getBuilderForParam(remoterInterfaceElement, param.asType())
-                paramBuilder.readOutResultsFromStub(param, paramType, outParamsNames[pIndex], methodBuilder)
+                val paramBuilder =
+                    bindingManager.getBuilderForParam(remoterInterfaceElement, param.asType())
+                paramBuilder.readOutResultsFromStub(
+                    param,
+                    paramType,
+                    outParamsNames[pIndex],
+                    methodBuilder
+                )
             }
 
             methodBuilder.endControlFlow()
@@ -266,19 +319,84 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
         }
 
         val isSuspendFunction = executableElement.isSuspendFunction()
-        val isSuspendReturnNullable = if (isSuspendFunction) executableElement.isSuspendReturningNullable() else false
-        val isSuspendUnit = if (isSuspendFunction) (executableElement.getReturnTypeOfSuspend().asTypeName() == UNIT) else false
+        val isSuspendReturnNullable =
+            if (isSuspendFunction) executableElement.isSuspendReturningNullable() else false
+        val isSuspendUnit = if (isSuspendFunction) (executableElement.getReturnTypeOfSuspend()
+            .asTypeName() == UNIT) else false
+
+//        if (methodName == "sendTextMessage") {
+//
+//            val contiuatinDeclaredType =
+//                executableElement.parameters.last().asType() as DeclaredType
+//
+//            val contiuatinType = contiuatinDeclaredType.typeArguments.first() as WildcardType
+//
+//            contiuatinDeclaredType.typeArguments.forEach {
+//                println("parameter: ${it} simpleName:${it.annotationMirrors} class:${it.javaClass}")
+//                println("args： ${it.asTypeName()}")
+//            }
+//
+//            val returnType = executableElement.getReturnTypeOfSuspend()
+//
+//            val declaredType = returnType as DeclaredType
+//            val elementType = declaredType.asElement()
+//            val ars = declaredType.typeArguments
+//
+//            println("elementType:${elementType.annotationMirrors}")
+//
+//            returnType.typeArguments.forEach {
+//                println("annotationMirror: ${it.annotationMirrors.size} ${it.annotationMirrors}")
+//            }
+//
+//            val declaredClassName = ClassName.bestGuess(elementType.toString())
+//
+//            ars.forEach {
+//                println("ars: ${it.getAnnotation(NullableType::class.java)} ${it.annotationMirrors.size} ${it.annotationMirrors}")
+//            }
+//
+////            val void = typeNameOf<Void?>()
+//            logInfo(
+//                """
+//            methodName:$methodName
+//            isSuspendFunction:$isSuspendFunction
+//            isSuspendReturnNullable:$isSuspendReturnNullable
+//            isSuspendUnit:$isSuspendUnit
+//            returnType:${executableElement.returnType}
+//            declaredType:$declaredType
+//            elementType:$elementType
+//            declaredClassName:$declaredClassName
+//            ars: size:${ars.size} ${
+//                    ars.joinToString {
+//                        "${it} kind:${it.kind} typeName:${it.asTypeName()} kotlinType:${it.asKotlinType()} isNullable:${
+//                            it.isNullable(
+//                                this
+//                            )
+//                        } isNullable2:${it.isNullable()}"
+//                    }
+//                }
+//            returnTypeOfSuspend:$returnType
+//            kotlinType:${returnType.asKotlinType(this, member)}
+//            """
+//            )
+//        }
 
         val methodBuilder = FunSpec.builder(methodName)
-                .addModifiers(KModifier.PUBLIC)
-                .addModifiers(KModifier.OVERRIDE)
-
+            .addModifiers(KModifier.PUBLIC)
+            .addModifiers(KModifier.OVERRIDE)
 
         if (isSuspendFunction) {
+            val returnType = executableElement.getReturnTypeOfSuspend()
             methodBuilder.addModifiers(KModifier.SUSPEND)
-            methodBuilder.returns(executableElement.getReturnTypeOfSuspend().asKotlinType(this, member).copy(isSuspendReturnNullable))
+            methodBuilder.returns(
+                returnType.asKotlinType(this, member)
+                    .copy(isSuspendReturnNullable)
+            )
         } else {
-            methodBuilder.returns(executableElement.returnType.asKotlinType(this, executableElement).copy(executableElement.isNullable()))
+            val returnType = executableElement.returnType
+            methodBuilder.returns(
+                returnType.asKotlinType(this, executableElement)
+                    .copy(executableElement.isNullable())
+            )
         }
 
 
@@ -302,38 +420,64 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
 
             if (paramIndex == varArgParamIndex && executableElement.isVarArgs) {
                 val arrayComponentType = (params.asType() as ArrayType).componentType
-                methodBuilder.addParameter(ParameterSpec.builder(params.simpleName.toString(),
-                        arrayComponentType.asKotlinType().copy(true)).addModifiers(KModifier.VARARG).build())
+                methodBuilder.addParameter(
+                    ParameterSpec.builder(
+                        params.simpleName.toString(),
+                        arrayComponentType.asKotlinType()
+                            .copy(true)
+                    ).addModifiers(KModifier.VARARG).build()
+                )
 
             } else {
-                methodBuilder.addParameter(ParameterSpec.builder(params.simpleName.toString(),
-                        params.asKotlinType(this)).build())
+                methodBuilder.addParameter(
+                    ParameterSpec.builder(
+                        params.simpleName.toString(),
+                        params.asKotlinType(this)
+                    ).build()
+                )
             }
 
             paramIndex++
         }
 
         if (isSuspendFunction) {
-            methodBuilder.beginControlFlow("return kotlinx.coroutines.withContext(%T.IO)", Dispatchers::class)
+            methodBuilder.beginControlFlow(
+                "return kotlinx.coroutines.withContext(%T.IO)",
+                Dispatchers::class
+            )
         }
 
 //        methodBuilder
 //                .addStatement("__checkProxy()")
         //add statements
-        methodBuilder.addStatement("val ${ParamBuilder.DATA} = %T.obtain()", ClassName.bestGuess("android.os.Parcel"))
+        methodBuilder.addStatement(
+            "val ${ParamBuilder.DATA} = %T.obtain()",
+            ClassName.bestGuess("android.os.Parcel")
+        )
         if (!isOneWay) {
-            methodBuilder.addStatement("val ${ParamBuilder.REPLY} = %T.obtain()", ClassName.bestGuess("android.os.Parcel"))
+            methodBuilder.addStatement(
+                "val ${ParamBuilder.REPLY} = %T.obtain()",
+                ClassName.bestGuess("android.os.Parcel")
+            )
         }
 
         if (isSuspendFunction) {
             if (!isSuspendUnit) {
-                methodBuilder.addStatement("var ${ParamBuilder.RESULT}: %T", executableElement.getReturnTypeOfSuspend().asKotlinType(this, member).copy(isSuspendReturnNullable))
+                methodBuilder.addStatement(
+                    "var ${ParamBuilder.RESULT}: %T",
+                    executableElement.getReturnTypeOfSuspend().asKotlinType(this, member)
+                        .copy(isSuspendReturnNullable)
+                )
             }
         } else {
 
             //add return if any
             if (executableElement.returnType.kind != TypeKind.VOID) {
-                methodBuilder.addStatement("var ${ParamBuilder.RESULT}: %T", executableElement.returnType.asKotlinType(this, executableElement).copy(executableElement.isNullable()))
+                methodBuilder.addStatement(
+                    "var ${ParamBuilder.RESULT}: %T",
+                    executableElement.returnType.asKotlinType(this, executableElement)
+                        .copy(executableElement.isNullable())
+                )
             }
         }
 
@@ -361,7 +505,8 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
             if (paramType != ParamBuilder.ParamType.IN) {
                 outParams.add(param)
             }
-            val paramBuilder: ParamBuilder = bindingManager.getBuilderForParam(remoterInterfaceElement, param.asType())
+            val paramBuilder: ParamBuilder =
+                bindingManager.getBuilderForParam(remoterInterfaceElement, param.asType())
             if (paramBuilder != null) {
                 paramBuilder.writeParamsToProxy(param, paramType, methodBuilder)
             } else {
@@ -377,7 +522,10 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
             }
         }
 
-        methodBuilder.addStatement("${ParamBuilder.DATA}.writeMap(__global_properties as %T<*, *>?)", MAP);
+        methodBuilder.addStatement(
+            "${ParamBuilder.DATA}.writeMap(__global_properties as %T<*, *>?)",
+            MAP
+        );
 
         //send remote command
         if (isOneWay) {
@@ -399,7 +547,10 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
             //read result
             if (isSuspendFunction) {
                 if (!isSuspendUnit) {
-                    val paramBuilder: ParamBuilder = bindingManager.getBuilderForParam(remoterInterfaceElement, executableElement.getReturnTypeOfSuspend())
+                    val paramBuilder: ParamBuilder = bindingManager.getBuilderForParam(
+                        remoterInterfaceElement,
+                        executableElement.getReturnTypeOfSuspend()
+                    )
                     if (paramBuilder != null) {
                         paramBuilder.readResultsFromProxy(executableElement, methodBuilder)
                     } else {
@@ -410,7 +561,10 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
 
             } else {
                 if (executableElement.returnType.kind != TypeKind.VOID) {
-                    val paramBuilder: ParamBuilder = bindingManager.getBuilderForParam(remoterInterfaceElement, executableElement.returnType)
+                    val paramBuilder: ParamBuilder = bindingManager.getBuilderForParam(
+                        remoterInterfaceElement,
+                        executableElement.returnType
+                    )
                     if (paramBuilder != null) {
                         paramBuilder.readResultsFromProxy(executableElement, methodBuilder)
                     } else {
@@ -420,8 +574,13 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
                 }
             }
             for (param in outParams) {
-                val paramType = if (param.getAnnotation(ParamIn::class.java) != null) ParamBuilder.ParamType.IN else if (param.getAnnotation(ParamOut::class.java) != null) ParamBuilder.ParamType.OUT else ParamBuilder.ParamType.IN_OUT
-                val paramBuilder: ParamBuilder = bindingManager.getBuilderForParam(remoterInterfaceElement, param.asType())
+                val paramType =
+                    if (param.getAnnotation(ParamIn::class.java) != null) ParamBuilder.ParamType.IN else if (param.getAnnotation(
+                            ParamOut::class.java
+                        ) != null
+                    ) ParamBuilder.ParamType.OUT else ParamBuilder.ParamType.IN_OUT
+                val paramBuilder: ParamBuilder =
+                    bindingManager.getBuilderForParam(remoterInterfaceElement, param.asType())
                 paramBuilder?.readOutParamsFromProxy(param, paramType, methodBuilder)
             }
         }
@@ -465,25 +624,25 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addGetParcelClass(classBuilder: TypeSpec.Builder) {
         val methodBuilder = FunSpec.builder("getParcelerClass")
-                .addModifiers(KModifier.PRIVATE)
-                .returns(Class::class.asTypeName().parameterizedBy(STAR).copy(true))
-                .addParameter("pObject", Any::class.asTypeName().copy(true))
-                .beginControlFlow("if (pObject != null)")
-                .addStatement("var objClass: Class<*>? = pObject.javaClass")
-                .addStatement("var found = false")
+            .addModifiers(KModifier.PRIVATE)
+            .returns(Class::class.asTypeName().parameterizedBy(STAR).copy(true))
+            .addParameter("pObject", Any::class.asTypeName().copy(true))
+            .beginControlFlow("if (pObject != null)")
+            .addStatement("var objClass: Class<*>? = pObject.javaClass")
+            .addStatement("var found = false")
 
-                .beginControlFlow("while (!found && objClass != null)")
-                .beginControlFlow("try")
-                .addStatement("Class.forName(objClass.name + \"\\\$\\\$Parcelable\")")
-                .addStatement("found = true")
-                .endControlFlow()
-                .beginControlFlow("catch (ignored: ClassNotFoundException) ")
-                .addStatement("objClass = objClass.superclass")
-                .endControlFlow()
-                .endControlFlow()
-                .addStatement("return objClass")
-                .endControlFlow()
-                .addStatement("return null")
+            .beginControlFlow("while (!found && objClass != null)")
+            .beginControlFlow("try")
+            .addStatement("Class.forName(objClass.name + \"\\\$\\\$Parcelable\")")
+            .addStatement("found = true")
+            .endControlFlow()
+            .beginControlFlow("catch (ignored: ClassNotFoundException) ")
+            .addStatement("objClass = objClass.superclass")
+            .endControlFlow()
+            .endControlFlow()
+            .addStatement("return objClass")
+            .endControlFlow()
+            .addStatement("return null")
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -492,23 +651,26 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addGetParcelObject(classBuilder: TypeSpec.Builder) {
         val methodBuilder = FunSpec.builder("getParcelerObject")
-                .addModifiers(KModifier.PRIVATE)
-                .returns(Any::class.asTypeName().copy(true))
-                .addParameter("pClassName", String::class.asTypeName().copy(true))
-                .addParameter("data", ClassName("android.os", "Parcel"))
-                .beginControlFlow("return try")
-                .beginControlFlow("if (pClassName != null)")
-                .addStatement("val creator = Class.forName(\"\$pClassName\$\\\$Parcelable\").getField(\"CREATOR\")[null] as %T.Creator<*>", ClassName("android.os", "Parcelable"))
-                .addStatement("val pWrapper = creator.createFromParcel(data)")
-                .addStatement("pWrapper.javaClass.getMethod(\"getParcel\").invoke(pWrapper)")
-                .endControlFlow()
-                .beginControlFlow("else")
-                .addStatement("null")
-                .endControlFlow()
-                .endControlFlow()
-                .beginControlFlow("catch (ignored: Exception)")
-                .addStatement("null")
-                .endControlFlow()
+            .addModifiers(KModifier.PRIVATE)
+            .returns(Any::class.asTypeName().copy(true))
+            .addParameter("pClassName", String::class.asTypeName().copy(true))
+            .addParameter("data", ClassName("android.os", "Parcel"))
+            .beginControlFlow("return try")
+            .beginControlFlow("if (pClassName != null)")
+            .addStatement(
+                "val creator = Class.forName(\"\$pClassName\$\\\$Parcelable\").getField(\"CREATOR\")[null] as %T.Creator<*>",
+                ClassName("android.os", "Parcelable")
+            )
+            .addStatement("val pWrapper = creator.createFromParcel(data)")
+            .addStatement("pWrapper.javaClass.getMethod(\"getParcel\").invoke(pWrapper)")
+            .endControlFlow()
+            .beginControlFlow("else")
+            .addStatement("null")
+            .endControlFlow()
+            .endControlFlow()
+            .beginControlFlow("catch (ignored: Exception)")
+            .addStatement("null")
+            .endControlFlow()
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -517,8 +679,16 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addProxyExtras(classBuilder: TypeSpec.Builder) {
         addRemoterProxyMethods(classBuilder)
-        addProxyDeathMethod(classBuilder, "linkToDeath", "Register a {@link android.os.IBinder.DeathRecipient} to know of binder connection lose\n")
-        addProxyDeathMethod(classBuilder, "unlinkToDeath", "UnRegisters a {@link android.os.IBinder.DeathRecipient}\n")
+        addProxyDeathMethod(
+            classBuilder,
+            "linkToDeath",
+            "Register a {@link android.os.IBinder.DeathRecipient} to know of binder connection lose\n"
+        )
+        addProxyDeathMethod(
+            classBuilder,
+            "unlinkToDeath",
+            "UnRegisters a {@link android.os.IBinder.DeathRecipient}\n"
+        )
         addProxyRemoteAlive(classBuilder)
         addProxyCheckException(classBuilder)
         addGetId(classBuilder)
@@ -535,19 +705,19 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addProxyDestroyMethods(classBuilder: TypeSpec.Builder) {
         var methodBuilder = FunSpec.builder("destroyStub")
-                .addModifiers(KModifier.PUBLIC)
-                .addModifiers(KModifier.OVERRIDE)
-                .addParameter("pObject", Any::class.asTypeName().copy(true))
-                .returns(Unit::class)
-                .beginControlFlow("if(pObject != null)")
-                .beginControlFlow("synchronized (stubMap)")
-                .addStatement("val binder = stubMap[pObject]")
-                .beginControlFlow("if (binder != null)")
-                .addStatement("(binder as %T).destroyStub()", RemoterStub::class)
-                .addStatement("stubMap.remove(pObject)")
-                .endControlFlow()
-                .endControlFlow()
-                .endControlFlow()
+            .addModifiers(KModifier.PUBLIC)
+            .addModifiers(KModifier.OVERRIDE)
+            .addParameter("pObject", Any::class.asTypeName().copy(true))
+            .returns(Unit::class)
+            .beginControlFlow("if(pObject != null)")
+            .beginControlFlow("synchronized (stubMap)")
+            .addStatement("val binder = stubMap[pObject]")
+            .beginControlFlow("if (binder != null)")
+            .addStatement("(binder as %T).destroyStub()", RemoterStub::class)
+            .addStatement("stubMap.remove(pObject)")
+            .endControlFlow()
+            .endControlFlow()
+            .endControlFlow()
         classBuilder.addFunction(methodBuilder.build())
 
 //        methodBuilder = FunSpec.builder("__checkProxy")
@@ -557,18 +727,18 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
 //        classBuilder.addFunction(methodBuilder.build())
 
         methodBuilder = FunSpec.builder("destroyProxy")
-                .addModifiers(KModifier.PUBLIC)
-                .addModifiers(KModifier.OVERRIDE)
-                .returns(Unit::class)
-                .addStatement("_proxyScope.%M()", MemberName("kotlinx.coroutines", "cancel"))
-                .addStatement("this.remoteBinder = null")
-                .addStatement("unRegisterProxyListener(null)")
-                .beginControlFlow("synchronized (stubMap)")
-                .beginControlFlow("stubMap.values.forEach")
-                .addStatement("(it as %T).destroyStub()", RemoterStub::class)
-                .endControlFlow()
-                .addStatement("stubMap.clear()")
-                .endControlFlow()
+            .addModifiers(KModifier.PUBLIC)
+            .addModifiers(KModifier.OVERRIDE)
+            .returns(Unit::class)
+            .addStatement("_proxyScope.%M()", MemberName("kotlinx.coroutines", "cancel"))
+            .addStatement("this.remoteBinder = null")
+            .addStatement("unRegisterProxyListener(null)")
+            .beginControlFlow("synchronized (stubMap)")
+            .beginControlFlow("stubMap.values.forEach")
+            .addStatement("(it as %T).destroyStub()", RemoterStub::class)
+            .endControlFlow()
+            .addStatement("stubMap.clear()")
+            .endControlFlow()
         if (bindingManager.hasRemoterBuilder()) {
             methodBuilder.addStatement("_remoterServiceConnector?.disconnect()")
         }
@@ -576,13 +746,16 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
 
 
         methodBuilder = FunSpec.builder("setRemoterGlobalProperties")
-                .addModifiers(KModifier.PUBLIC)
-                .addModifiers(KModifier.OVERRIDE)
-                .addParameter("properties", ClassName("kotlin.collections", "MutableMap").parameterizedBy(
-                        String::class.asTypeName(),
-                        Any::class.asTypeName()).copy(true))
-                .returns(Unit::class)
-                .addStatement("this.__global_properties = properties")
+            .addModifiers(KModifier.PUBLIC)
+            .addModifiers(KModifier.OVERRIDE)
+            .addParameter(
+                "properties", ClassName("kotlin.collections", "MutableMap").parameterizedBy(
+                    String::class.asTypeName(),
+                    Any::class.asTypeName()
+                ).copy(true)
+            )
+            .returns(Unit::class)
+            .addStatement("this.__global_properties = properties")
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -591,27 +764,27 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addRemoterProxyMethods(classBuilder: TypeSpec.Builder) {
         var methodBuilder = FunSpec.builder("registerProxyListener")
-                .addModifiers(KModifier.PUBLIC)
-                .returns(Unit::class)
-                .addParameter("listener", RemoterProxyListener::class)
-                .addStatement("unRegisterProxyListener(null)")
-                .addStatement("val pListener = DeathRecipient(listener)")
-                .addStatement("linkToDeath(pListener)")
-                .addStatement("proxyListener = pListener")
-                .addModifiers(KModifier.OVERRIDE)
+            .addModifiers(KModifier.PUBLIC)
+            .returns(Unit::class)
+            .addParameter("listener", RemoterProxyListener::class)
+            .addStatement("unRegisterProxyListener(null)")
+            .addStatement("val pListener = DeathRecipient(listener)")
+            .addStatement("linkToDeath(pListener)")
+            .addStatement("proxyListener = pListener")
+            .addModifiers(KModifier.OVERRIDE)
         classBuilder.addFunction(methodBuilder.build())
 
 
         methodBuilder = FunSpec.builder("unRegisterProxyListener")
-                .addModifiers(KModifier.PUBLIC)
-                .returns(Unit::class)
-                .addParameter("listener", RemoterProxyListener::class.asTypeName().copy(true))
-                .beginControlFlow("proxyListener?.let ")
-                .addStatement("unlinkToDeath(it)")
-                .addStatement("it.unregister()")
-                .endControlFlow()
-                .addStatement("proxyListener = null")
-                .addModifiers(KModifier.OVERRIDE)
+            .addModifiers(KModifier.PUBLIC)
+            .returns(Unit::class)
+            .addParameter("listener", RemoterProxyListener::class.asTypeName().copy(true))
+            .beginControlFlow("proxyListener?.let ")
+            .addStatement("unlinkToDeath(it)")
+            .addStatement("it.unregister()")
+            .endControlFlow()
+            .addStatement("proxyListener = null")
+            .addModifiers(KModifier.OVERRIDE)
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -619,18 +792,22 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
     /**
      * Add proxy method that exposes the linkToDeath
      */
-    private fun addProxyDeathMethod(classBuilder: TypeSpec.Builder, deathMethod: String, doc: String) {
+    private fun addProxyDeathMethod(
+        classBuilder: TypeSpec.Builder,
+        deathMethod: String,
+        doc: String
+    ) {
 
         val methodBuilder = FunSpec.builder(deathMethod)
-                .addModifiers(KModifier.PUBLIC)
-                .returns(Unit::class)
-                .addParameter("deathRecipient", ClassName("android.os", "IBinder.DeathRecipient"))
-                .beginControlFlow("try")
-                .addStatement("_getRemoteServiceBinder().$deathMethod(deathRecipient, 0)")
-                .endControlFlow()
-                .beginControlFlow("catch (ignored: %T)", Exception::class)
-                .endControlFlow()
-                .addKdoc(doc)
+            .addModifiers(KModifier.PUBLIC)
+            .returns(Unit::class)
+            .addParameter("deathRecipient", ClassName("android.os", "IBinder.DeathRecipient"))
+            .beginControlFlow("try")
+            .addStatement("_getRemoteServiceBinder().$deathMethod(deathRecipient, 0)")
+            .endControlFlow()
+            .beginControlFlow("catch (ignored: %T)", Exception::class)
+            .endControlFlow()
+            .addKdoc(doc)
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -639,17 +816,17 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addProxyRemoteAlive(classBuilder: TypeSpec.Builder) {
         val methodBuilder = FunSpec.builder("isRemoteAlive")
-                .addModifiers(KModifier.PUBLIC)
-                .addModifiers(KModifier.OVERRIDE)
-                .returns(Boolean::class)
-                .addStatement("var alive = false")
-                .beginControlFlow("try")
-                .addStatement("alive = _getRemoteServiceBinder().isBinderAlive() == true")
-                .endControlFlow()
-                .beginControlFlow("catch (ignored:%T)", Exception::class)
-                .endControlFlow()
-                .addStatement("return alive")
-                .addKdoc("Checks whether the remote process is alive\n")
+            .addModifiers(KModifier.PUBLIC)
+            .addModifiers(KModifier.OVERRIDE)
+            .returns(Boolean::class)
+            .addStatement("var alive = false")
+            .beginControlFlow("try")
+            .addStatement("alive = _getRemoteServiceBinder().isBinderAlive() == true")
+            .endControlFlow()
+            .beginControlFlow("catch (ignored:%T)", Exception::class)
+            .endControlFlow()
+            .addStatement("return alive")
+            .addKdoc("Checks whether the remote process is alive\n")
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -658,21 +835,21 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addProxyCheckException(classBuilder: TypeSpec.Builder) {
         val methodBuilder = FunSpec.builder("checkException")
-                .addModifiers(KModifier.PRIVATE)
-                .returns(Throwable::class.asTypeName().copy(true))
-                .addParameter("reply", ClassName("android.os", "Parcel"))
-                .addStatement("val code = reply.readInt()")
-                .addStatement("var exception: Throwable? = null")
-                .beginControlFlow("if (code != 0)")
-                .addStatement("val msg = reply.readString()")
-                .beginControlFlow("exception = if (code == REMOTER_EXCEPTION_CODE) ")
-                .addStatement("reply.readSerializable() as Throwable")
-                .endControlFlow()
-                .beginControlFlow("else")
-                .addStatement("RuntimeException(msg)")
-                .endControlFlow()
-                .endControlFlow()
-                .addStatement("return exception")
+            .addModifiers(KModifier.PRIVATE)
+            .returns(Throwable::class.asTypeName().copy(true))
+            .addParameter("reply", ClassName("android.os", "Parcel"))
+            .addStatement("val code = reply.readInt()")
+            .addStatement("var exception: Throwable? = null")
+            .beginControlFlow("if (code != 0)")
+            .addStatement("val msg = reply.readString()")
+            .beginControlFlow("exception = if (code == REMOTER_EXCEPTION_CODE) ")
+            .addStatement("reply.readSerializable() as Throwable")
+            .endControlFlow()
+            .beginControlFlow("else")
+            .addStatement("RuntimeException(msg)")
+            .endControlFlow()
+            .endControlFlow()
+            .addStatement("return exception")
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -682,10 +859,10 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addHashCode(classBuilder: TypeSpec.Builder) {
         val methodBuilder = FunSpec.builder("hashCode")
-                .addModifiers(KModifier.PUBLIC)
-                .returns(Int::class)
-                .addModifiers(KModifier.OVERRIDE)
-                .addStatement("return _binderID")
+            .addModifiers(KModifier.PUBLIC)
+            .returns(Int::class)
+            .addModifiers(KModifier.OVERRIDE)
+            .addStatement("return _binderID")
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -705,11 +882,11 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
             typeAddition += ">"
         }
         val methodBuilder = FunSpec.builder("equals")
-                .addModifiers(KModifier.PUBLIC)
-                .addParameter("other", Any::class.asTypeName().copy(true))
-                .returns(Boolean::class)
-                .addModifiers(KModifier.OVERRIDE)
-                .addStatement("return (other is $remoterInterfaceClassName$PROXY_SUFFIX$typeAddition) && (other.hashCode() == hashCode()) && (_stubProcess == other._stubProcess)")
+            .addModifiers(KModifier.PUBLIC)
+            .addParameter("other", Any::class.asTypeName().copy(true))
+            .returns(Boolean::class)
+            .addModifiers(KModifier.OVERRIDE)
+            .addStatement("return (other is $remoterInterfaceClassName$PROXY_SUFFIX$typeAddition) && (other.hashCode() == hashCode()) && (_stubProcess == other._stubProcess)")
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -718,10 +895,10 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addProxyToString(classBuilder: TypeSpec.Builder) {
         val methodBuilder = FunSpec.builder("toString")
-                .addModifiers(KModifier.PUBLIC)
-                .returns(String::class)
-                .addModifiers(KModifier.OVERRIDE)
-                .addStatement("return \"$remoterInterfaceClassName$PROXY_SUFFIX[ \"+ _stubProcess + \":\" + _binderID + \"]\"")
+            .addModifiers(KModifier.PUBLIC)
+            .returns(String::class)
+            .addModifiers(KModifier.OVERRIDE)
+            .addStatement("return \"$remoterInterfaceClassName$PROXY_SUFFIX[ \"+ _stubProcess + \":\" + _binderID + \"]\"")
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -731,54 +908,67 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
     private fun addProxyGetServiceSuspended(classBuilder: TypeSpec.Builder) {
         if (bindingManager.hasRemoterBuilder()) {
             val methodBuilder = FunSpec.builder("_getRemoteServiceBinderSuspended")
-                    .addModifiers(KModifier.PRIVATE)
-                    .addModifiers(KModifier.SUSPEND)
-                    .addParameter(ParameterSpec.builder("waitForInit", Boolean::class)
+                .addModifiers(KModifier.PRIVATE)
+                .addModifiers(KModifier.SUSPEND)
+                .addParameter(
+                    ParameterSpec.builder("waitForInit", Boolean::class)
                         .defaultValue("true")
-                        .build())
-                    .returns(ClassName("android.os", "IBinder"))
-                    .addStatement("val sConnector = _remoterServiceConnector")
-                    .beginControlFlow("return if (sConnector != null)")
-                    .addStatement("val rBinder = sConnector.getService()")
-                    .beginControlFlow("if (waitForInit)")
-                    .addStatement("_serviceInitComplete.await()")
-                    .endControlFlow()
-                    .addStatement("rBinder")
-                    .endControlFlow()
-                    .beginControlFlow("else")
-                    .addStatement("remoteBinder?: throw %T(\"No remote binder or IServiceConnector set\")", RuntimeException::class)
-                    .endControlFlow()
+                        .build()
+                )
+                .returns(ClassName("android.os", "IBinder"))
+                .addStatement("val sConnector = _remoterServiceConnector")
+                .beginControlFlow("return if (sConnector != null)")
+                .addStatement("val rBinder = sConnector.getService()")
+                .beginControlFlow("if (waitForInit)")
+                .addStatement("_serviceInitComplete.await()")
+                .endControlFlow()
+                .addStatement("rBinder")
+                .endControlFlow()
+                .beginControlFlow("else")
+                .addStatement(
+                    "remoteBinder?: throw %T(\"No remote binder or IServiceConnector set\")",
+                    RuntimeException::class
+                )
+                .endControlFlow()
 
             classBuilder.addFunction(methodBuilder.build())
         }
         val methodBuilderNonSuspended = FunSpec.builder("_getRemoteServiceBinder")
-                .addModifiers(KModifier.PRIVATE)
-                .returns(ClassName("android.os", "IBinder"))
-            .addParameter(ParameterSpec.builder("waitForInit", Boolean::class)
-                .defaultValue("true")
-                .build())
+            .addModifiers(KModifier.PRIVATE)
+            .returns(ClassName("android.os", "IBinder"))
+            .addParameter(
+                ParameterSpec.builder("waitForInit", Boolean::class)
+                    .defaultValue("true")
+                    .build()
+            )
         if (bindingManager.hasRemoterBuilder()) {
             methodBuilderNonSuspended.beginControlFlow("val result = if (remoteBinder != null)")
-                    .addStatement("remoteBinder")
-                    .endControlFlow()
-                    .beginControlFlow("else if (_remoterServiceConnector != null)")
-                    .beginControlFlow("kotlinx.coroutines.runBlocking")
-                    .addStatement("_remoterServiceConnector?.getService()")
-                    .endControlFlow()
-                    .endControlFlow()
-                    .beginControlFlow("else ")
-                    .addStatement("remoteBinder")
-                    .endControlFlow()
-                    .beginControlFlow("if (remoteBinder == null && waitForInit)")
-                    .addStatement("kotlinx.coroutines.runBlocking { _serviceInitComplete.await() }")
-                    .endControlFlow()
-                    .addStatement("return result?: throw %T(\"No remote binder or IServiceConnectot set\")", RuntimeException::class)
+                .addStatement("remoteBinder")
+                .endControlFlow()
+                .beginControlFlow("else if (_remoterServiceConnector != null)")
+                .beginControlFlow("kotlinx.coroutines.runBlocking")
+                .addStatement("_remoterServiceConnector?.getService()")
+                .endControlFlow()
+                .endControlFlow()
+                .beginControlFlow("else ")
+                .addStatement("remoteBinder")
+                .endControlFlow()
+                .beginControlFlow("if (remoteBinder == null && waitForInit)")
+                .addStatement("kotlinx.coroutines.runBlocking { _serviceInitComplete.await() }")
+                .endControlFlow()
+                .addStatement(
+                    "return result?: throw %T(\"No remote binder or IServiceConnectot set\")",
+                    RuntimeException::class
+                )
         } else {
             methodBuilderNonSuspended.addStatement("val result = remoteBinder")
                 .beginControlFlow("if (waitForInit)")
                 .addStatement("kotlinx.coroutines.runBlocking { _serviceInitComplete.await() }")
                 .endControlFlow()
-            methodBuilderNonSuspended.addStatement("return result?: throw %T(\"No remote binder or IServiceConnectot set\")", RuntimeException::class)
+            methodBuilderNonSuspended.addStatement(
+                "return result?: throw %T(\"No remote binder or IServiceConnectot set\")",
+                RuntimeException::class
+            )
         }
 
         classBuilder.addFunction(methodBuilderNonSuspended.build())
@@ -791,23 +981,51 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      * Add proxy method to get unique id
      */
     private fun addGetId(classBuilder: TypeSpec.Builder) {
-        addGetIdMethod(classBuilder, "__remoter_getStubID", "TRANSACTION__getStubID", "_getRemoteServiceBinder(false)")
-        addGetIdMethod(classBuilder, "__remoter_getStubProcessID", "TRANSACTION__getStubProcessID", "_getRemoteServiceBinder(false)")
+        addGetIdMethod(
+            classBuilder,
+            "__remoter_getStubID",
+            "TRANSACTION__getStubID",
+            "_getRemoteServiceBinder(false)"
+        )
+        addGetIdMethod(
+            classBuilder,
+            "__remoter_getStubProcessID",
+            "TRANSACTION__getStubProcessID",
+            "_getRemoteServiceBinder(false)"
+        )
         if (bindingManager.hasRemoterBuilder()) {
-            addGetIdMethod(classBuilder, "__remoter_getStubID_sus", "TRANSACTION__getStubID", "_getRemoteServiceBinderSuspended(false)", true)
-            addGetIdMethod(classBuilder, "__remoter_getStubProcessID_sus", "TRANSACTION__getStubProcessID", "_getRemoteServiceBinderSuspended(false)", true)
+            addGetIdMethod(
+                classBuilder,
+                "__remoter_getStubID_sus",
+                "TRANSACTION__getStubID",
+                "_getRemoteServiceBinderSuspended(false)",
+                true
+            )
+            addGetIdMethod(
+                classBuilder,
+                "__remoter_getStubProcessID_sus",
+                "TRANSACTION__getStubProcessID",
+                "_getRemoteServiceBinderSuspended(false)",
+                true
+            )
         }
     }
 
     /**
      * Add proxy method to get unique id
      */
-    private fun addGetIdMethod(classBuilder: TypeSpec.Builder, methodName: String, descriptorName: String, getMethod: String, isSuspended: Boolean = false) {
+    private fun addGetIdMethod(
+        classBuilder: TypeSpec.Builder,
+        methodName: String,
+        descriptorName: String,
+        getMethod: String,
+        isSuspended: Boolean = false
+    ) {
         val methodBuilder = FunSpec.builder(methodName)
-                .addModifiers(KModifier.PRIVATE)
-                .returns(Int::class)
-                .addStatement("val data = Parcel.obtain()")
-                .addStatement("val reply = Parcel.obtain()")
+            .addModifiers(KModifier.PRIVATE)
+            .returns(Int::class)
+            .addStatement("val data = Parcel.obtain()")
+            .addStatement("val reply = Parcel.obtain()")
         methodBuilder.beginControlFlow("val result = try ")
         //write the descriptor
         methodBuilder.addStatement("data.writeInterfaceToken(DESCRIPTOR)")
@@ -862,16 +1080,16 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
 //        classBuilder.addFunction(methodBuilder.build())
 
         var methodBuilder = FunSpec.builder("destroyStub")
-                .addModifiers(KModifier.PUBLIC)
-                .addModifiers(KModifier.OVERRIDE)
-                .beginControlFlow("try")
-                //.addStatement("finalize()")
-                .addStatement("this.attachInterface(null, DESCRIPTOR)")
-                .addStatement("binderWrapper.binder = null")
-                .endControlFlow()
-                .beginControlFlow("catch (t:%T)", Throwable::class)
-                .endControlFlow()
-                .addStatement("serviceImpl = null")
+            .addModifiers(KModifier.PUBLIC)
+            .addModifiers(KModifier.OVERRIDE)
+            .beginControlFlow("try")
+            //.addStatement("finalize()")
+            .addStatement("this.attachInterface(null, DESCRIPTOR)")
+            .addStatement("binderWrapper.binder = null")
+            .endControlFlow()
+            .beginControlFlow("catch (t:%T)", Throwable::class)
+            .endControlFlow()
+            .addStatement("serviceImpl = null")
         classBuilder.addFunction(methodBuilder.build())
     }
 
@@ -881,46 +1099,46 @@ class KMethodBuilder(remoterInterfaceElement: Element, bindingManager: KBindingM
      */
     private fun addSubInterceptMethods(classBuilder: TypeSpec.Builder) {
         val methodBuilder = FunSpec.builder("onDispatchTransaction")
-                .addModifiers(KModifier.PROTECTED)
-                .addModifiers(KModifier.OPEN)
-                .throws(Exception::class.java)
-                .addKdoc("Override to intercept before binder call for validation\n")
-                .addParameter("code", Int::class)
+            .addModifiers(KModifier.PROTECTED)
+            .addModifiers(KModifier.OPEN)
+            .throws(Exception::class.java)
+            .addKdoc("Override to intercept before binder call for validation\n")
+            .addParameter("code", Int::class)
         classBuilder.addFunction(methodBuilder.build())
     }
 
     private fun addSubMapTransaction(classBuilder: TypeSpec.Builder) {
         val methodBuilder = FunSpec.builder("mapTransactionCode")
-                .addModifiers(KModifier.PRIVATE)
-                .returns(Int::class)
-                .addParameter("code", Int::class)
+            .addModifiers(KModifier.PRIVATE)
+            .returns(Int::class)
+            .addParameter("code", Int::class)
 
-                .beginControlFlow("if (checkStubProxyMatch == false || code == INTERFACE_TRANSACTION)")
-                .addStatement("return code")
-                .endControlFlow()
+            .beginControlFlow("if (checkStubProxyMatch == false || code == INTERFACE_TRANSACTION)")
+            .addStatement("return code")
+            .endControlFlow()
 
-                .addStatement("var mappedCode = code")
+            .addStatement("var mappedCode = code")
 
-                .beginControlFlow("if (__lastMethodIndexOfProxy == -1)")
-                .addStatement("__lastMethodIndexOfProxy = code - 1")
-                .endControlFlow()
+            .beginControlFlow("if (__lastMethodIndexOfProxy == -1)")
+            .addStatement("__lastMethodIndexOfProxy = code - 1")
+            .endControlFlow()
 
-                .beginControlFlow("if (__lastMethodIndexOfProxy < __lastMethodIndex) ")
-                .beginControlFlow("if (code > __lastMethodIndexOfProxy)")
-                .addStatement("mappedCode = __lastMethodIndex + (code - __lastMethodIndexOfProxy)")
-                .endControlFlow()
-                .endControlFlow()
+            .beginControlFlow("if (__lastMethodIndexOfProxy < __lastMethodIndex) ")
+            .beginControlFlow("if (code > __lastMethodIndexOfProxy)")
+            .addStatement("mappedCode = __lastMethodIndex + (code - __lastMethodIndexOfProxy)")
+            .endControlFlow()
+            .endControlFlow()
 
-                .beginControlFlow("else if (__lastMethodIndexOfProxy > __lastMethodIndex)")
-                .beginControlFlow("if (code > __lastMethodIndexOfProxy) ")
-                .addStatement("mappedCode = __lastMethodIndex + (code - __lastMethodIndexOfProxy)")
-                .endControlFlow()
-                .beginControlFlow("else if (code > __lastMethodIndex)")
-                .addStatement("throw RuntimeException(\"Interface mismatch between Proxy and Stub \" + code + \" [\" + __lastMethodIndex + \"]. Use same interface for both client and server\")")
-                .endControlFlow()
-                .endControlFlow()
+            .beginControlFlow("else if (__lastMethodIndexOfProxy > __lastMethodIndex)")
+            .beginControlFlow("if (code > __lastMethodIndexOfProxy) ")
+            .addStatement("mappedCode = __lastMethodIndex + (code - __lastMethodIndexOfProxy)")
+            .endControlFlow()
+            .beginControlFlow("else if (code > __lastMethodIndex)")
+            .addStatement("throw RuntimeException(\"Interface mismatch between Proxy and Stub \" + code + \" [\" + __lastMethodIndex + \"]. Use same interface for both client and server\")")
+            .endControlFlow()
+            .endControlFlow()
 
-                .addStatement("return mappedCode");
+            .addStatement("return mappedCode");
 
 
         classBuilder.addFunction(methodBuilder.build())

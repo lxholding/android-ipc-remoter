@@ -5,6 +5,7 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.STAR
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.asTypeName
+import remoter.annotations.MutableKotlinType
 import remoter.annotations.NullableType
 import javax.lang.model.element.Element
 import javax.lang.model.element.ElementKind
@@ -21,6 +22,10 @@ internal fun Element.isNullable(builder: KRemoterBuilder? = null): Boolean {
 
 internal fun TypeMirror.isNullable(builder: KRemoterBuilder? = null): Boolean {
     return (this.getAnnotation(org.jetbrains.annotations.Nullable::class.java) != null)
+}
+
+internal fun TypeMirror.isMutable(builder: KRemoterBuilder? = null): Boolean {
+    return this.getAnnotation(MutableKotlinType::class.java)?.value == true
 }
 
 internal fun Element.isNullableType(typeIndex: Int, builder: KRemoterBuilder? = null): Boolean {
@@ -61,11 +66,12 @@ fun Element.hasSuspendFunction(): Boolean {
 }
 
 
-internal fun Element.asKotlinType(builder: KRemoterBuilder? = null, isMutable: Boolean = false) = asType().asKotlinType(builder, this, isMutable).copy(isNullable(builder))
+internal fun Element.asKotlinType(builder: KRemoterBuilder? = null) =
+    asType().asKotlinType(builder, this).copy(isNullable(builder))
 
 internal fun getNameForClassNameSearch(name: String): String {
     val result = name.split(' ').last()
-    return javaToKotlinMap[result] ?: result
+    return javaToKotlinType(result) ?: result
 }
 
 internal fun ExecutableElement.getReturnAsKotlinType(builder: KRemoterBuilder? = null): TypeName {
@@ -84,7 +90,22 @@ internal fun ExecutableElement.getReturnAsTypeMirror(builder: KRemoterBuilder? =
     }
 }
 
-internal fun TypeMirror.asKotlinType(builder: KRemoterBuilder? = null, sourceElement: Element? = null, isMutable: Boolean = false): TypeName {
+internal fun getTypeClassString(nameString: String): String? {
+    if (nameString.contains('<')) {
+        return nameString.substring(
+            nameString.indexOf('<') + 1,
+            nameString.indexOf('>')
+        )
+    }
+    return null
+}
+
+internal fun TypeMirror.asKotlinType(
+    builder: KRemoterBuilder? = null,
+    sourceElement: Element? = null,
+//    isMutable: Boolean = false
+): TypeName {
+    val isMutable = this.isMutable(builder)
     val name = asTypeName()
     val isNullable = getAnnotation(org.jetbrains.annotations.Nullable::class.java) != null
     val result = when (kind) {
@@ -102,7 +123,9 @@ internal fun TypeMirror.asKotlinType(builder: KRemoterBuilder? = null, sourceEle
                 TypeKind.SHORT -> ShortArray::class.asTypeName()
                 else -> {
                     val typeIsNullable = sourceElement?.isNullableType(0) == true
-                    ClassName.bestGuess("kotlin.Array").parameterizedBy(arrayComponentType.asKotlinType(builder, sourceElement).copy(typeIsNullable))
+                    ClassName.bestGuess("kotlin.Array").parameterizedBy(
+                        arrayComponentType.asKotlinType(builder, sourceElement).copy(typeIsNullable)
+                    )
                 }
             }
         }
@@ -111,17 +134,24 @@ internal fun TypeMirror.asKotlinType(builder: KRemoterBuilder? = null, sourceEle
             if (name == STAR) {
                 STAR
             } else {
-                val mappedName = javaToKotlinMap[wType.toString().split(' ').last()]
+                val mappedName = javaToKotlinType(wType.toString().split(' ').last(), isMutable)
                 if (mappedName != null) {
                     ClassName.bestGuess(getNameForClassNameSearch(mappedName))
                 } else {
                     val nameString = name.toString()
                     if (nameString.contains(' ') || nameString.contains('<')) {
-                        val mainType = ClassName.bestGuess(getNameForClassNameSearch(nameString.split('<').first()))
+                        val mainType = ClassName.bestGuess(
+                            getNameForClassNameSearch(
+                                nameString.split('<').first()
+                            )
+                        )
                         var result: TypeName = mainType
-                        if (nameString.contains('<')) {
-                            val typeString = nameString.substring(nameString.indexOf('<') + 1, nameString.indexOf('>'))
-                            result = mainType.parameterizedBy(typeString.split(',').map { ClassName.bestGuess(getNameForClassNameSearch(it)).copy(true) })
+                        val typeString = getTypeClassString(nameString)
+                        if (typeString != null) {
+                            result = mainType.parameterizedBy(
+                                typeString.split(',').map {
+                                    ClassName.bestGuess(getNameForClassNameSearch(it)).copy(true)
+                                })
                         }
                         result
                     } else {
@@ -142,7 +172,7 @@ internal fun TypeMirror.asKotlinType(builder: KRemoterBuilder? = null, sourceEle
         TypeKind.DECLARED -> {
             val declaredType = this as DeclaredType
             val elementType = declaredType.asElement()
-            val mappedName = javaToKotlinMap[elementType.toString()]
+            val mappedName = javaToKotlinType(elementType.toString(), isMutable)
             val declaredClassName = if (mappedName != null) {
                 ClassName.bestGuess(getNameForClassNameSearch(mappedName))
             } else {
@@ -159,7 +189,9 @@ internal fun TypeMirror.asKotlinType(builder: KRemoterBuilder? = null, sourceEle
                     val typeIsNullable = sourceElement?.isNullableType(typeIndex) == true
                     typeIndex++
                     if (typeArgTypeMirror != STAR) {
-                        ClassName.bestGuess(getNameForClassNameSearch(it.asKotlinType().toString())).copy(typeIsNullable || it.isNullable())
+                        val clazzName = it.asKotlinType().toString()
+                        ClassName.bestGuess(getNameForClassNameSearch(clazzName))
+                            .copy(typeIsNullable || it.isNullable())
                     } else {
                         typeArgTypeMirror
                     }
@@ -179,7 +211,11 @@ internal fun TypeMirror.asKotlinType(builder: KRemoterBuilder? = null, sourceEle
 fun ExecutableElement.isSuspendFunction() = parameters.isNotEmpty()
         && parameters.last().asType().toString().contains("kotlin.coroutines.Continuation")
 
-fun ExecutableElement.isSuspendReturningNullable() = getAnnotation(NullableType::class.java) != null
+fun ExecutableElement.isSuspendReturningNullable(): Boolean {
+    return getAnnotation(NullableType::class.java)?.run {
+        this.nullable
+    } == true
+}
 
 
 fun ExecutableElement.getReturnTypeOfSuspend(): TypeMirror {

@@ -1,6 +1,7 @@
 package remoter.compiler.kbuilder
 
 import com.squareup.kotlinpoet.FunSpec
+import com.squareup.kotlinpoet.asTypeName
 import javax.lang.model.element.Element
 import javax.lang.model.element.ExecutableElement
 import javax.lang.model.element.VariableElement
@@ -72,7 +73,15 @@ internal class ListParamBuilder(remoterInterfaceElement: Element, bindingManager
                 if (isListOfStrings(param.asType())) {
                     methodBuilder.addStatement("$paramName = $DATA.createStringArrayList()$suffix")
                 } else {
-                    methodBuilder.addStatement("$paramName = $DATA.readArrayList(getClass().getClassLoader())$suffix")
+//                    ___remoter_data.readArrayList(IMRecentContact::class.java.classLoader)!! as List<IMRecentContact>
+                    val type = param.asType()
+                    val kotlinType =  param.asKotlinType()
+                    val paramTypeName = type.asTypeName().toString()
+                    val paramTypeString = getTypeClassString(paramTypeName)
+                    val classLoader = "$paramTypeString::class.java.classLoader"
+//                    println("writeParamsToStub param:$param paramTypeName:$paramTypeName paramTypeTags:$paramTypeTags  kind:${param.kind} kindClass:${param.kind.declaringClass} type:${param.asType()} paramName:$paramName paramType:$paramType")
+//                    methodBuilder.addStatement("$paramName = $DATA.readArrayList(getClass().getClassLoader())$suffix")
+                    methodBuilder.addStatement("$paramName = $DATA.readArrayList($classLoader)$suffix as $kotlinType")
                 }
             }
         }
