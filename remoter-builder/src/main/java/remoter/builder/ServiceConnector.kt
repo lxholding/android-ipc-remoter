@@ -98,24 +98,25 @@ class ServiceConnector private constructor(private val context: Context, private
     }
 
     companion object {
-        private val serviceConnectors = mutableMapOf<ComponentName, ServiceConnector>()
+        private val serviceConnectors = mutableMapOf<String, ServiceConnector>()
 
         /**
          * Returns an [IServiceConnector] for the given explicit [Intent].
          *
          * @param explicitIntent The explicit intent with [Intent.setComponent] set
          */
-        fun of(context: Context, explicitIntent: Intent): IServiceConnector {
+        fun of(context: Context, explicitIntent: Intent, suffix:String = ""): IServiceConnector {
             synchronized(serviceConnectors) {
-                return serviceConnectors.getOrPut(explicitIntent.component!!) { ServiceConnector(context, explicitIntent) }
+                val key = explicitIntent.component!!.flattenToShortString() + suffix
+                return serviceConnectors.getOrPut(key) { ServiceConnector(context, explicitIntent) }
             }
         }
 
         /**
          * Returns an [IServiceConnector] for a service that is registered with the given intent action [intentAction]
          */
-        fun of(context: Context, intentAction: String): IServiceConnector {
-            return of(context, asExplicitIntent(context, Intent(intentAction)))
+        fun of(context: Context, intentAction: String, suffix:String = ""): IServiceConnector {
+            return of(context, asExplicitIntent(context, Intent(intentAction)), suffix)
         }
 
         /**

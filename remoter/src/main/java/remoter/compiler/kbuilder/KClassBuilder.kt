@@ -92,9 +92,14 @@ internal class KClassBuilder(element: Element, bindingManager: KBindingManager) 
                 FunSpec.constructorBuilder()
                     .addParameter("context", ClassName("android.content", "Context"))
                     .addParameter("serviceIntentAction", String::class)
+                    .addParameter(
+                        ParameterSpec.builder("suffix", String::class)
+                            .defaultValue("%S", "")
+                            .build()
+                    )
                     .callThisConstructor(
                         CodeBlock.of(
-                            "%T.of(context, serviceIntentAction)",
+                            "%T.of(context, serviceIntentAction, suffix)",
                             ClassName("remoter.builder", "ServiceConnector")
                         )
                     )
@@ -106,8 +111,13 @@ internal class KClassBuilder(element: Element, bindingManager: KBindingManager) 
                 FunSpec.constructorBuilder()
                     .addParameter("context", ClassName("android.content", "Context"))
                     .addParameter("explicitServiceIntent", ClassName("android.content", "Intent"))
+                    .addParameter(
+                        ParameterSpec.builder("suffix", String::class)
+                            .defaultValue("%S", "")
+                            .build()
+                    )
                     .addKdoc("Creates an instance of this proxy that connects to a service exposed through the given [explicitServiceIntent]")
-                    .callThisConstructor("ServiceConnector.of(context, explicitServiceIntent)")
+                    .callThisConstructor("ServiceConnector.of(context, explicitServiceIntent, suffix)")
                     .build()
             )
 
